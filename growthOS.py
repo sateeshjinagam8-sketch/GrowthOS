@@ -19,6 +19,8 @@ PROFILE_FILE = os.path.join(DATA_DIR, "profile.json")
 HABITS_FILE = os.path.join(DATA_DIR, "habits.json")
 SKILLS_FILE = os.path.join(DATA_DIR, "skills.json")
 MOODS_FILE = os.path.join(DATA_DIR, "moods.json")
+CHATS_FILE = os.path.join(DATA_DIR, "ai_chats.json")
+GAMIFICATION_FILE = os.path.join(DATA_DIR, "gamification.json")
 
 
 # ─────────────────────────────────────────────
@@ -39,6 +41,81 @@ def load_json(filepath, default=None):
 def save_json(filepath, data):
     with open(filepath, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+# ─────────────────────────────────────────────
+# Gamification Helpers
+# ─────────────────────────────────────────────
+def get_gamification():
+    default_state = {"total_xp": 0, "history": [], "badges": []}
+    return load_json(GAMIFICATION_FILE, default_state)
+
+def save_gamification(state):
+    save_json(GAMIFICATION_FILE, state)
+
+def add_xp(amount, reason):
+    state = get_gamification()
+    today = datetime.now().strftime("%Y-%m-%d")
+    state["total_xp"] += amount
+    state["history"].append({"date": today, "amount": amount, "reason": reason})
+    save_gamification(state)
+    return state
+
+def get_level_info(xp):
+    if xp <= 100:
+        return 1, "Beginner 🌱", 100
+    elif xp <= 300:
+        return 2, "Explorer 🚀", 300
+    elif xp <= 600:
+        return 3, "Achiever ⚡", 600
+    elif xp <= 1000:
+        return 4, "Champion 🏆", 1000
+    else:
+        return 5, "Legend 🔥", xp + 1
+
+def check_and_award_badges():
+    state = get_gamification()
+    awarded = set(state.get("badges", []))
+    new_badges = []
+    
+    habits = load_json(HABITS_FILE, [])
+    skills = load_json(SKILLS_FILE, [])
+    moods = load_json(MOODS_FILE, [])
+    chats = load_json(CHATS_FILE, [])
+    
+    if "Streak Master" not in awarded:
+        for h in habits:
+            streak = 0
+            day = datetime.now()
+            comps = set(h.get("completions", []))
+            while day.strftime("%Y-%m-%d") in comps:
+                streak += 1
+                day -= timedelta(days=1)
+            if streak >= 7:
+                new_badges.append("Streak Master")
+                break
+                
+    if "Skill Collector" not in awarded and len(skills) >= 5:
+        new_badges.append("Skill Collector")
+        
+    if "Mind Guardian" not in awarded and len(moods) >= 7:
+        new_badges.append("Mind Guardian")
+        
+    if "Consistency King" not in awarded:
+        total_comps = sum(len(h.get("completions", [])) for h in habits)
+        if total_comps >= 30:
+            new_badges.append("Consistency King")
+            
+    if "AI Explorer" not in awarded:
+        total_msgs = sum(sum(1 for m in c.get("messages", []) if m["role"] == "user") for c in chats)
+        if total_msgs >= 10:
+            new_badges.append("AI Explorer")
+            
+    if new_badges:
+        state["badges"].extend(new_badges)
+        save_gamification(state)
+        for b in new_badges:
+            st.toast(f"🏆 New Badge Unlocked: {b}!")
 
 
 # ─────────────────────────────────────────────
@@ -326,6 +403,119 @@ st.markdown(
 
     /* Hide default Streamlit footer */
     footer {visibility: hidden;}
+
+    /* Hide Streamlit Sidebar toggle on desktop */
+    @media (min-width: 768px) {
+        section[data-testid="stSidebar"] { display: none !important; width: 0 !important; }
+        button[data-testid="collapsedControl"] { display: none !important; }
+    }
+
+    /* Main title */
+    .main-title {
+        text-align: center;
+        font-size: 3.5rem;
+        font-weight: 800;
+        margin-top: 10px;
+        margin-bottom: 20px;
+        background: linear-gradient(90deg, #e0e0ff, #667eea, #e0e0ff);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    /* Dashboard Cards */
+    .dashboard-card {
+        background: linear-gradient(135deg, rgba(15,12,41,0.8) 0%, rgba(48,43,99,0.8) 100%);
+        border: 1px solid rgba(102, 126, 234, 0.3);
+        border-radius: 20px;
+        padding: 24px;
+        margin-bottom: 20px;
+        color: #e0e0ff;
+        box-shadow: 0 8px 32px rgba(48, 43, 99, 0.4);
+        text-align: center;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+    }
+    .dashboard-card h3 {
+        margin-top: 0;
+        font-size: 1.4rem;
+        background: linear-gradient(90deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 700;
+    }
+    .dashboard-stat {
+        font-size: 2.2rem;
+        font-weight: 800;
+        color: #38ef7d;
+        margin: 10px 0;
+    }
+
+    /* Top Nav Container */
+    .top-nav-container {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 30px;
+        flex-wrap: wrap;
+    }
+    @media (max-width: 767px) {
+        .top-nav-container { display: none !important; }
+    }
+
+    /* Floating Profile Button Hook */
+    .float-profile-anchor + div {
+        position: fixed;
+        top: 20px;
+        left: 30px;
+        z-index: 9999;
+    }
+    .float-profile-anchor + div button {
+        width: auto !important;
+        height: auto !important;
+        border-radius: 30px !important;
+        background: linear-gradient(135deg, #1e1e2f, #2a2a40) !important;
+        color: white !important;
+        font-size: 16px !important;
+        font-weight: 600 !important;
+        border: 2px solid rgba(102, 126, 234, 0.4) !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3) !important;
+        transition: transform 0.3s, box-shadow 0.3s, border-color 0.3s !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 10px 20px !important;
+    }
+    .float-profile-anchor + div button:hover {
+        transform: scale(1.05) !important;
+        border-color: #667eea !important;
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6) !important;
+    }
+    .float-profile-anchor + div button p {
+        margin: 0 !important;
+        padding: 0 !important;
+        font-size: 16px !important;
+    }
+    @media (max-width: 767px) {
+        .float-profile-anchor + div { display: none !important; }
+    }
+
+    /* Hide top nav Streamlit buttons default styling to make them look like tabs */
+    .top-nav-container div[data-testid="stButton"] button {
+        background: rgba(102, 126, 234, 0.1);
+        border: 1px solid rgba(102, 126, 234, 0.3);
+        color: #e0e0ff;
+        border-radius: 20px;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    .top-nav-container div[data-testid="stButton"] button:hover {
+        background: linear-gradient(135deg, #667eea, #764ba2);
+        color: white;
+        border-color: transparent;
+        transform: translateY(-2px);
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -333,18 +523,151 @@ st.markdown(
 
 
 # ─────────────────────────────────────────────
-# Sidebar Navigation
+# Navigation & Layout State
 # ─────────────────────────────────────────────
+if "module" not in st.session_state:
+    st.session_state.module = "🏠 Dashboard"
+
+# Floating Profile Button (Top Left)
+profile_data = load_json(PROFILE_FILE, {})
+user_avatar = profile_data.get("avatar", "👤")
+with st.container():
+    st.markdown('<div class="float-profile-anchor"></div>', unsafe_allow_html=True)
+    if st.button(f"{user_avatar} Profile", key="float_profile_btn"):
+        st.session_state.module = "👤 Profile"
+        st.rerun()
+
+st.markdown('<div class="main-title">🚀 GrowthOS</div>', unsafe_allow_html=True)
+
+# Top Navigation (Desktop)
+st.markdown('<div class="top-nav-container">', unsafe_allow_html=True)
+nav_options = ["🏠 Dashboard", "✅ Habit Tracker", "🎯 SkillMap", "🧘 MindMate", "🎮 Achievements", "🤖 AI Motivator"]
+cols = st.columns(len(nav_options))
+for i, opt in enumerate(nav_options):
+    if cols[i].button(opt, use_container_width=True, key=f"topnav_{opt}"):
+        st.session_state.module = opt
+        st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
+
+# Sidebar Navigation (Mobile)
 with st.sidebar:
     st.markdown("# 🚀 GrowthOS")
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
-    module = st.radio(
+    
+    def on_sidebar_change():
+        st.session_state.module = st.session_state.sidebar_nav
+        
+    sidebar_opts = ["🏠 Dashboard", "👤 Profile", "✅ Habit Tracker", "🎯 SkillMap", "🧘 MindMate", "🤖 AI Motivator", "🎮 Achievements"]
+    
+    st.radio(
         "Navigate",
-        ["👤 Profile", "✅ Habit Tracker", "🎯 SkillMap", "🧘 MindMate", "🤖 AI Motivator"],
+        sidebar_opts,
         label_visibility="collapsed",
+        key="sidebar_nav",
+        index=sidebar_opts.index(st.session_state.module) if st.session_state.module in sidebar_opts else 0,
+        on_change=on_sidebar_change
     )
     st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
     st.caption(f"📅 {datetime.now().strftime('%A, %B %d, %Y')}")
+
+    # Calculate today's XP
+    gamification = get_gamification()
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    today_xp = sum(item.get("amount", 0) for item in gamification.get("history", []) if item.get("date") == today_str)
+    
+    st.markdown(f"""
+    <div style="background: rgba(102, 126, 234, 0.1); padding: 10px; border-radius: 8px; margin-top: 10px; text-align: center; border: 1px solid rgba(102, 126, 234, 0.3);">
+        <div style="font-size: 0.8rem; color: #e0e0ff; opacity: 0.8;">XP Earned Today</div>
+        <div style="font-size: 1.2rem; font-weight: bold; color: #38ef7d;">+{today_xp} XP</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+module = st.session_state.module
+
+# ═══════════════════════════════════════════════
+#  MODULE: 🏠 Dashboard
+# ═══════════════════════════════════════════════
+if module == "🏠 Dashboard":
+    st.markdown('<p class="section-header">🏠 Dashboard</p>', unsafe_allow_html=True)
+    st.markdown("Overview of your growth journey.")
+    st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+    
+    habits = load_json(HABITS_FILE, [])
+    skills = load_json(SKILLS_FILE, [])
+    moods = load_json(MOODS_FILE, [])
+    state = get_gamification()
+    today = datetime.now().strftime("%Y-%m-%d")
+    
+    completed_habits_today = sum(1 for h in habits if today in h.get("completions", []))
+    mood_logged_today = any(m["date"] == today for m in moods)
+    level, level_name, _ = get_level_info(state.get("total_xp", 0))
+    
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown(f'''
+        <div class="dashboard-card">
+            <h3>✅ Habits</h3>
+            <div class="dashboard-stat">{completed_habits_today} / {len(habits)}</div>
+            <p>Completed Today</p>
+        </div>
+        ''', unsafe_allow_html=True)
+        if st.button("Open Habits", use_container_width=True, key="dash_habits"):
+            st.session_state.module = "✅ Habit Tracker"
+            st.rerun()
+            
+    with c2:
+        st.markdown(f'''
+        <div class="dashboard-card" style="background: linear-gradient(135deg, rgba(17,153,142,0.8) 0%, rgba(56,239,125,0.8) 100%);">
+            <h3>🎯 SkillMap</h3>
+            <div class="dashboard-stat" style="color: white;">{len(skills)}</div>
+            <p>Active Skills</p>
+        </div>
+        ''', unsafe_allow_html=True)
+        if st.button("Open Skills", use_container_width=True, key="dash_skills"):
+            st.session_state.module = "🎯 SkillMap"
+            st.rerun()
+            
+    with c3:
+        mood_status = "Done ✅" if mood_logged_today else "Pending ⏳"
+        st.markdown(f'''
+        <div class="dashboard-card" style="background: linear-gradient(135deg, rgba(238,9,121,0.8) 0%, rgba(255,106,0,0.8) 100%);">
+            <h3>🧘 MindMate</h3>
+            <div class="dashboard-stat" style="color: white; font-size: 1.5rem;">{mood_status}</div>
+            <p>Today's Check-in</p>
+        </div>
+        ''', unsafe_allow_html=True)
+        if st.button("Open MindMate", use_container_width=True, key="dash_moods"):
+            st.session_state.module = "🧘 MindMate"
+            st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    c4, c5 = st.columns(2)
+    with c4:
+        st.markdown(f'''
+        <div class="dashboard-card" style="background: linear-gradient(135deg, rgba(247,151,30,0.8) 0%, rgba(255,210,0,0.8) 100%);">
+            <h3>🎮 Achievements</h3>
+            <div class="dashboard-stat" style="color: white;">Level {level}</div>
+            <p>{level_name}</p>
+        </div>
+        ''', unsafe_allow_html=True)
+        if st.button("View Achievements", use_container_width=True, key="dash_achieve"):
+            st.session_state.module = "🎮 Achievements"
+            st.rerun()
+            
+    with c5:
+        profile = load_json(PROFILE_FILE, {})
+        user_name = profile.get("name", "Learner")
+        avatar = profile.get("avatar", "🌟")
+        st.markdown(f'''
+        <div class="dashboard-card" style="background: linear-gradient(135deg, rgba(102,126,234,0.8) 0%, rgba(118,75,162,0.8) 100%);">
+            <h3>👤 Profile</h3>
+            <div class="dashboard-stat" style="color: white; font-size: 1.8rem;">{avatar} {user_name}</div>
+            <p>Your Identity</p>
+        </div>
+        ''', unsafe_allow_html=True)
+        if st.button("View Profile", use_container_width=True, key="dash_profile"):
+            st.session_state.module = "👤 Profile"
+            st.rerun()
 
 
 # ═══════════════════════════════════════════════
@@ -560,6 +883,19 @@ elif module == "✅ Habit Tracker":
                     if st.button("Done", key=f"done_{idx}"):
                         habits[idx]["completions"].append(today)
                         save_json(HABITS_FILE, habits)
+                        
+                        add_xp(10, f"Completed habit: {habit['name']}")
+                        # Check streak
+                        new_streak = 0
+                        day_check = datetime.now()
+                        comps_check = set(habits[idx]["completions"])
+                        while day_check.strftime("%Y-%m-%d") in comps_check:
+                            new_streak += 1
+                            day_check -= timedelta(days=1)
+                        if new_streak == 7:
+                            add_xp(50, "7-day streak bonus!")
+                        check_and_award_badges()
+                        
                         st.rerun()
                 else:
                     st.caption("✔️")
@@ -599,6 +935,7 @@ elif module == "🎯 SkillMap":
             s_category = st.text_input("Custom Category Name", placeholder="e.g. Music")
         s_goal = st.text_input("Goal", placeholder="e.g. Build 3 projects")
         s_minutes = st.number_input("Daily Practice (minutes)", min_value=1, max_value=480, value=30, step=5)
+        s_goal_days = st.number_input("How many days is your goal?", min_value=1, max_value=365, value=30, step=1)
 
         if st.button("Add Skill", use_container_width=True):
             if s_name.strip():
@@ -607,9 +944,13 @@ elif module == "🎯 SkillMap":
                     "category": s_category,
                     "goal": s_goal.strip(),
                     "daily_minutes": s_minutes,
+                    "goal_days": s_goal_days,
+                    "completions": [],
                     "added": datetime.now().strftime("%Y-%m-%d"),
                 })
                 save_json(SKILLS_FILE, skills)
+                add_xp(20, "Added a new skill")
+                check_and_award_badges()
                 st.success(f"🎯 **{s_name.strip()}** added to your SkillMap!")
                 st.rerun()
             else:
@@ -645,19 +986,45 @@ elif module == "🎯 SkillMap":
         st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
         st.markdown("### 📋 Your Skills")
 
-        # ── Skills Table ──
-        table_data = []
-        for s in skills:
+        # ── Skills Cards ──
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        
+        for idx, s in enumerate(skills):
             emoji = CATEGORY_EMOJI.get(s["category"], "⭐")
-            table_data.append({
-                "Skill": s["name"],
-                "Category": f"{emoji} {s['category']}",
-                "Goal": s.get("goal", "—"),
-                "Daily (min)": s.get("daily_minutes", 0),
-                "Added": s.get("added", "—"),
-            })
-
-        st.dataframe(table_data, use_container_width=True, hide_index=True)
+            goal_days = s.get("goal_days", 30)
+            comps = s.get("completions", [])
+            done_today = today_str in comps
+            completed_days = len(comps)
+            
+            # Generate circles
+            circles = "⬤ " * completed_days + "○ " * max(0, goal_days - completed_days)
+            circles = circles.strip()
+            
+            with st.container():
+                st.markdown(f"""
+                <div style="background: rgba(30,30,47,0.5); border: 1px solid rgba(102,126,234,0.3); border-radius: 12px; padding: 20px; margin-bottom: 10px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                        <div style="font-size: 1.2rem; font-weight: bold; color: #e0e0ff;">{emoji} {s["name"]}</div>
+                        <div style="background: rgba(102,126,234,0.2); padding: 4px 10px; border-radius: 20px; font-size: 0.8rem; color: #e0e0ff;">{s.get("daily_minutes", 0)} min/day</div>
+                    </div>
+                    <div style="font-size: 0.9rem; color: #a0a0c0; margin-bottom: 10px;">Goal: {s.get("goal", "—")}</div>
+                    <div style="font-size: 0.85rem; color: #38ef7d; font-weight: bold; margin-bottom: 5px;">{completed_days}/{goal_days} days completed</div>
+                    <div style="font-size: 1.2rem; letter-spacing: 2px; color: #667eea; word-break: break-all; margin-bottom: 10px;">{circles}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                col_btn1, col_btn2 = st.columns([1, 4])
+                with col_btn1:
+                    if not done_today:
+                        if st.button("Practice Done", key=f"skill_done_{idx}"):
+                            skills[idx].setdefault("completions", []).append(today_str)
+                            save_json(SKILLS_FILE, skills)
+                            add_xp(15, f"Practiced skill: {s['name']}")
+                            check_and_award_badges()
+                            st.rerun()
+                    else:
+                        st.button("Done Today ✅", key=f"skill_done_{idx}", disabled=True)
+                st.markdown("<br>", unsafe_allow_html=True)
 
         # ── Remove Skill ──
         st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
@@ -734,6 +1101,8 @@ elif module == "🧘 MindMate":
     elif selected_mood:
         moods.append({"date": today, "mood": selected_mood})
         save_json(MOODS_FILE, moods)
+        add_xp(5, "Daily mood check-in")
+        check_and_award_badges()
         st.success(f"Logged as **{MOOD_EMOJI[selected_mood]} {selected_mood}** — take care of yourself! 💜")
         st.rerun()
 
@@ -910,132 +1279,365 @@ elif module == "🤖 AI Motivator":
 - Today's Mood: {today_mood}
 - Date: {today}"""
 
-    # ── Initialize chat history ──
+    # ── Chat persistence helpers ──
+    import uuid as _uuid
+
+    def load_all_chats():
+        """Load all saved chat sessions from disk."""
+        return load_json(CHATS_FILE, [])
+
+    def save_all_chats(chats):
+        """Save all chat sessions to disk."""
+        save_json(CHATS_FILE, chats)
+
+    def get_current_chat_id():
+        """Get the active chat session ID."""
+        return st.session_state.get("active_chat_id", None)
+
+    def create_new_chat():
+        """Create a new chat session and make it active."""
+        chat_id = str(_uuid.uuid4())[:8]
+        st.session_state["active_chat_id"] = chat_id
+        st.session_state["ai_chat_history"] = []
+        for key in ["advice_response", "daily_challenge", "mood_response"]:
+            st.session_state.pop(key, None)
+        return chat_id
+
+    def save_current_chat():
+        """Save the current chat session to disk."""
+        chat_id = get_current_chat_id()
+        if not chat_id or not st.session_state.get("ai_chat_history"):
+            return
+        chats = load_all_chats()
+        # Auto-generate a name from the first user message
+        first_msg = next((m["content"] for m in st.session_state["ai_chat_history"] if m["role"] == "user"), "New Chat")
+        chat_name = first_msg[:50] + ("..." if len(first_msg) > 50 else "")
+        # Check if this chat already exists
+        existing = next((c for c in chats if c["id"] == chat_id), None)
+        if existing:
+            existing["messages"] = st.session_state["ai_chat_history"]
+            existing["updated"] = datetime.now().strftime("%Y-%m-%d %H:%M")
+            if existing.get("name") == "New Chat":
+                existing["name"] = chat_name
+        else:
+            chats.insert(0, {
+                "id": chat_id,
+                "name": chat_name,
+                "messages": st.session_state["ai_chat_history"],
+                "created": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                "updated": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            })
+        # Keep only last 50 chats
+        chats = chats[:50]
+        save_all_chats(chats)
+
+    def load_chat_by_id(chat_id):
+        """Load a specific chat session by its ID."""
+        chats = load_all_chats()
+        chat = next((c for c in chats if c["id"] == chat_id), None)
+        if chat:
+            st.session_state["active_chat_id"] = chat_id
+            st.session_state["ai_chat_history"] = chat["messages"]
+            return True
+        return False
+
+    def delete_chat_by_id(chat_id):
+        """Delete a chat session by its ID."""
+        chats = load_all_chats()
+        chats = [c for c in chats if c["id"] != chat_id]
+        save_all_chats(chats)
+
+    # ── Initialize chat state ──
     if "ai_chat_history" not in st.session_state:
         st.session_state["ai_chat_history"] = []
+    if "active_chat_id" not in st.session_state:
+        st.session_state["active_chat_id"] = None
 
-    # ── Header bar: status + new chat ──
-    header_l, header_r = st.columns([6, 1])
-    with header_l:
-        if backend == "ollama":
-            st.markdown('<span class="ai-status-badge ollama">🟢 Ollama · gemma3:1b</span>', unsafe_allow_html=True)
-        elif backend == "groq":
-            st.markdown('<span class="ai-status-badge groq">🟣 Groq · llama-3.3-70b</span>', unsafe_allow_html=True)
-    with header_r:
-        if st.button("🗑️ New", key="new_chat", use_container_width=True):
-            st.session_state["ai_chat_history"] = []
-            for key in ["advice_response", "daily_challenge", "mood_response"]:
-                st.session_state.pop(key, None)
+    # ── Previous chats sidebar (within main area) ──
+    all_chats = load_all_chats()
+
+    chat_col, main_col = st.columns([1, 3])
+
+    with chat_col:
+        st.markdown("#### 💬 Chats")
+        if st.button("➕ New Chat", key="new_chat_btn", use_container_width=True):
+            create_new_chat()
             st.rerun()
 
-    st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
 
-    # ── Display chat history or welcome screen ──
-    if not st.session_state["ai_chat_history"]:
-        # Welcome screen with quick actions
-        st.markdown(f"""
-        <div class="claude-welcome">
-            <h2>Hey {user_name} 👋</h2>
-            <p>I'm your AI growth mentor. Ask me anything or try a quick action below.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        if not all_chats:
+            st.caption("No previous chats yet.")
+        else:
+            for chat in all_chats:
+                chat_id = chat["id"]
+                is_active = chat_id == get_current_chat_id()
+                msg_count = len(chat.get("messages", []))
+                time_str = chat.get("updated", chat.get("created", ""))
 
-        q1, q2 = st.columns(2)
-        q3, q4 = st.columns(2)
-        with q1:
-            if st.button("💡 Give me personalized advice", key="qa1", use_container_width=True):
-                st.session_state["_pending_quick"] = f"""{context_block}
+                # Chat button with active state styling
+                btn_label = f"{'▶ ' if is_active else ''}{chat['name']}"
+                col_btn, col_del = st.columns([5, 1])
+                with col_btn:
+                    if st.button(btn_label, key=f"chat_{chat_id}", use_container_width=True):
+                        load_chat_by_id(chat_id)
+                        st.rerun()
+                with col_del:
+                    if st.button("🗑", key=f"del_{chat_id}"):
+                        delete_chat_by_id(chat_id)
+                        if is_active:
+                            create_new_chat()
+                        st.rerun()
+                st.caption(f"  📝 {msg_count} msgs · {time_str}")
+
+    with main_col:
+        # ── Header bar ──
+        header_l, header_r = st.columns([6, 1])
+        with header_l:
+            if backend == "ollama":
+                st.markdown('<span class="ai-status-badge ollama">🟢 Ollama · gemma3:1b</span>', unsafe_allow_html=True)
+            elif backend == "groq":
+                st.markdown('<span class="ai-status-badge groq">🟣 Groq · llama-3.3-70b</span>', unsafe_allow_html=True)
+        with header_r:
+            if st.button("🗑️ Clear", key="clear_chat", use_container_width=True):
+                create_new_chat()
+                st.rerun()
+
+        st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+
+        # ── Display chat history or welcome screen ──
+        if not st.session_state["ai_chat_history"]:
+            # Welcome screen with quick actions
+            st.markdown(f"""
+            <div class="claude-welcome">
+                <h2>Hey {user_name} 👋</h2>
+                <p>I'm your AI growth mentor. Ask me anything or try a quick action below.</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            q1, q2 = st.columns(2)
+            q3, q4 = st.columns(2)
+            with q1:
+                if st.button("💡 Give me personalized advice", key="qa1", use_container_width=True):
+                    if not get_current_chat_id():
+                        create_new_chat()
+                    st.session_state["_pending_quick"] = f"""{context_block}
 
 Based on the user's profile and progress above, give them specific, personalized motivational advice.
 Address them by name. Reference their actual habits, skills, and today's mood.
 Be specific — mention which habits they completed or missed, and give actionable tips for the rest of the day."""
-                st.session_state["_pending_label"] = "Give me personalized advice"
-                st.rerun()
-        with q2:
-            if st.button("🎯 Give me today's challenge", key="qa2", use_container_width=True):
-                st.session_state["_pending_quick"] = f"""{context_block}
+                    st.session_state["_pending_label"] = "Give me personalized advice"
+                    st.rerun()
+            with q2:
+                if st.button("🎯 Give me today's challenge", key="qa2", use_container_width=True):
+                    if not get_current_chat_id():
+                        create_new_chat()
+                    st.session_state["_pending_quick"] = f"""{context_block}
 
 Generate ONE specific, actionable daily challenge for this user based on their skills and goals.
 The challenge should be achievable today and push them slightly outside their comfort zone.
 Format: Start with the challenge title in bold, then explain what to do in 2-3 sentences.
 Make it very specific — mention exact skills, durations, and measurable outcomes."""
-                st.session_state["_pending_label"] = "Give me today's challenge"
-                st.rerun()
-        with q3:
-            if st.button("🧠 Help me with my mood", key="qa3", use_container_width=True):
-                if today_mood == "Stressed":
-                    mood_instruction = "The user is feeling STRESSED. Give calming, compassionate advice first, then gently motivational guidance. Suggest a breathing exercise and one small win they can achieve today."
-                elif today_mood == "Happy":
-                    mood_instruction = "The user is feeling HAPPY. Capitalize on this energy! Give them a growth challenge, suggest leveling up a skill, and encourage them to help someone else today."
-                else:
-                    mood_instruction = "The user is feeling NEUTRAL. Give them focus tips, suggest a way to spark motivation, and recommend a small achievable task to build momentum."
-                st.session_state["_pending_quick"] = f"""{context_block}
+                    st.session_state["_pending_label"] = "Give me today's challenge"
+                    st.rerun()
+            with q3:
+                if st.button("🧠 Help me with my mood", key="qa3", use_container_width=True):
+                    if not get_current_chat_id():
+                        create_new_chat()
+                    if today_mood == "Stressed":
+                        mood_instruction = "The user is feeling STRESSED. Give calming, compassionate advice first, then gently motivational guidance. Suggest a breathing exercise and one small win they can achieve today."
+                    elif today_mood == "Happy":
+                        mood_instruction = "The user is feeling HAPPY. Capitalize on this energy! Give them a growth challenge, suggest leveling up a skill, and encourage them to help someone else today."
+                    else:
+                        mood_instruction = "The user is feeling NEUTRAL. Give them focus tips, suggest a way to spark motivation, and recommend a small achievable task to build momentum."
+                    st.session_state["_pending_quick"] = f"""{context_block}
 
 {mood_instruction}
 
 Address them by name and reference their actual habits and skills."""
-                st.session_state["_pending_label"] = f"Help me with my mood ({today_mood})"
-                st.rerun()
-        with q4:
-            if st.button("📊 Summarize my progress", key="qa4", use_container_width=True):
-                st.session_state["_pending_quick"] = f"""{context_block}
+                    st.session_state["_pending_label"] = f"Help me with my mood ({today_mood})"
+                    st.rerun()
+            with q4:
+                if st.button("📊 Summarize my progress", key="qa4", use_container_width=True):
+                    if not get_current_chat_id():
+                        create_new_chat()
+                    st.session_state["_pending_quick"] = f"""{context_block}
 
 Give a concise progress summary for this user. Include: habits completion rate today, skills they're building, mood trend, and one encouraging observation. End with one actionable next step."""
-                st.session_state["_pending_label"] = "Summarize my progress"
-                st.rerun()
-    else:
-        # Render chat messages in Claude-style
-        for msg in st.session_state["ai_chat_history"]:
-            if msg["role"] == "user":
-                with st.chat_message("user", avatar="🧑"):
-                    st.markdown(msg["content"])
-            else:
-                with st.chat_message("assistant", avatar="🤖"):
-                    st.markdown(msg["content"])
+                    st.session_state["_pending_label"] = "Summarize my progress"
+                    st.rerun()
+        else:
+            # Render chat messages in Claude-style
+            for msg in st.session_state["ai_chat_history"]:
+                if msg["role"] == "user":
+                    with st.chat_message("user", avatar="🧑"):
+                        st.markdown(msg["content"])
+                else:
+                    with st.chat_message("assistant", avatar="🤖"):
+                        st.markdown(msg["content"])
 
-    # ── Process pending quick action ──
-    if "_pending_quick" in st.session_state:
-        prompt = st.session_state.pop("_pending_quick")
-        label = st.session_state.pop("_pending_label", "Quick action")
-        st.session_state["ai_chat_history"].append({"role": "user", "content": label})
-        with st.chat_message("user", avatar="🧑"):
-            st.markdown(label)
-        with st.chat_message("assistant", avatar="🤖"):
-            with st.spinner("Thinking..."):
-                response = ask_ai(prompt)
-            st.markdown(response)
-        st.session_state["ai_chat_history"].append({"role": "assistant", "content": response})
-        # Keep last 20 messages
-        if len(st.session_state["ai_chat_history"]) > 20:
-            st.session_state["ai_chat_history"] = st.session_state["ai_chat_history"][-20:]
-        st.rerun()
+        # ── Process pending quick action ──
+        if "_pending_quick" in st.session_state:
+            prompt = st.session_state.pop("_pending_quick")
+            label = st.session_state.pop("_pending_label", "Quick action")
+            st.session_state["ai_chat_history"].append({"role": "user", "content": label})
+            with st.chat_message("user", avatar="🧑"):
+                st.markdown(label)
+            with st.chat_message("assistant", avatar="🤖"):
+                with st.spinner("Thinking..."):
+                    response = ask_ai(prompt)
+                st.markdown(response)
+            st.session_state["ai_chat_history"].append({"role": "assistant", "content": response})
+            # Keep last 20 messages per chat
+            if len(st.session_state["ai_chat_history"]) > 20:
+                st.session_state["ai_chat_history"] = st.session_state["ai_chat_history"][-20:]
+            save_current_chat()
+            
+            add_xp(5, "Asked AI Motivator (Quick Action)")
+            check_and_award_badges()
+            
+            st.rerun()
 
-    # ── Chat input (Enter sends, Shift+Enter for new line, auto-clears) ──
-    user_input = st.chat_input("Message AI Motivator...", key="claude_chat_input")
+        # ── Chat input ──
+        user_input = st.chat_input("Message AI Motivator...", key="claude_chat_input")
 
-    if user_input:
-        # Add user message
-        st.session_state["ai_chat_history"].append({"role": "user", "content": user_input})
+        if user_input:
+            # Ensure we have an active chat
+            if not get_current_chat_id():
+                create_new_chat()
 
-        # Build the AI prompt with context
-        prompt = f"""{context_block}
+            # Add user message
+            st.session_state["ai_chat_history"].append({"role": "user", "content": user_input})
+
+            # Build the AI prompt with context
+            prompt = f"""{context_block}
 
 User asks: {user_input}
 
 Respond as a personal growth mentor. Be supportive, specific, and reference their data where relevant."""
 
-        # Get AI response
-        with st.chat_message("user", avatar="🧑"):
-            st.markdown(user_input)
-        with st.chat_message("assistant", avatar="🤖"):
-            with st.spinner("Thinking..."):
-                response = ask_ai(prompt)
-            st.markdown(response)
+            # Get AI response
+            with st.chat_message("user", avatar="🧑"):
+                st.markdown(user_input)
+            with st.chat_message("assistant", avatar="🤖"):
+                with st.spinner("Thinking..."):
+                    response = ask_ai(prompt)
+                st.markdown(response)
 
-        st.session_state["ai_chat_history"].append({"role": "assistant", "content": response})
+            st.session_state["ai_chat_history"].append({"role": "assistant", "content": response})
 
-        # Keep last 20 messages
-        if len(st.session_state["ai_chat_history"]) > 20:
-            st.session_state["ai_chat_history"] = st.session_state["ai_chat_history"][-20:]
-        st.rerun()
+            # Keep last 20 messages per chat
+            if len(st.session_state["ai_chat_history"]) > 20:
+                st.session_state["ai_chat_history"] = st.session_state["ai_chat_history"][-20:]
 
+            # Save chat to disk
+            save_current_chat()
+            
+            add_xp(5, "Asked AI Motivator")
+            check_and_award_badges()
+            
+            st.rerun()
+
+
+# ═══════════════════════════════════════════════
+#  MODULE 5 — 🎮 Achievements
+# ═══════════════════════════════════════════════
+elif module == "🎮 Achievements":
+    st.markdown('<p class="section-header">🎮 Gamification Dashboard</p>', unsafe_allow_html=True)
+    st.markdown("Level up your life. Track your growth journey.")
+    st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+
+    state = get_gamification()
+    total_xp = state.get("total_xp", 0)
+    level, level_name, next_goal = get_level_info(total_xp)
+    
+    # Top Section: Level and XP
+    c1, c2 = st.columns([1, 2])
+    with c1:
+        st.markdown(
+            f"""
+            <div class="profile-card" style="padding: 20px;">
+                <div style="font-size: 3rem; margin-bottom: 10px;">{level_name.split()[-1]}</div>
+                <div class="name">Level {level}</div>
+                <div style="font-size: 1.2rem; opacity: 0.9; margin-top: 5px;">{level_name.split()[0]}</div>
+            </div>
+            """, unsafe_allow_html=True
+        )
+    with c2:
+        st.markdown("### Total Experience")
+        st.markdown(f"<h1 style='color: #38ef7d; font-size: 3.5rem; margin: 0;'>{total_xp} XP</h1>", unsafe_allow_html=True)
+        
+        if level < 5:
+            progress = min(1.0, total_xp / next_goal)
+            st.progress(progress)
+            st.caption(f"{total_xp} / {next_goal} XP to reach Level {level + 1}")
+        else:
+            st.progress(1.0)
+            st.caption("Max level reached! You are a legend.")
+            
+    st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+    
+    # Middle Section: Badges
+    st.markdown("### 🏅 Your Badges")
+    awarded_badges = state.get("badges", [])
+    
+    ALL_BADGES = {
+        "Streak Master": ("🔥", "7 day habit streak"),
+        "Skill Collector": ("🎯", "5+ skills added"),
+        "Mind Guardian": ("🧘", "7 mood check-ins"),
+        "Consistency King": ("💪", "30 habits completed"),
+        "AI Explorer": ("🤖", "Used AI Motivator 10 times")
+    }
+    
+    badge_cols = st.columns(5)
+    for i, (b_name, (b_emoji, b_desc)) in enumerate(ALL_BADGES.items()):
+        with badge_cols[i % 5]:
+            if b_name in awarded_badges:
+                # Earned
+                st.markdown(
+                    f"""
+                    <div style="background: linear-gradient(135deg, rgba(102,126,234,0.2), rgba(118,75,162,0.2)); border: 1px solid #667eea; border-radius: 12px; padding: 15px 10px; text-align: center; height: 100%;">
+                        <div style="font-size: 2.5rem; margin-bottom: 5px;">{b_emoji}</div>
+                        <div style="font-weight: 600; font-size: 0.9rem; color: #e0e0ff;">{b_name}</div>
+                        <div style="font-size: 0.75rem; color: #a0a0c0; margin-top: 5px;">{b_desc}</div>
+                    </div>
+                    """, unsafe_allow_html=True
+                )
+            else:
+                # Locked
+                st.markdown(
+                    f"""
+                    <div style="background: rgba(30,30,47,0.5); border: 1px solid rgba(102,126,234,0.1); border-radius: 12px; padding: 15px 10px; text-align: center; height: 100%; opacity: 0.5; filter: grayscale(100%);">
+                        <div style="font-size: 2.5rem; margin-bottom: 5px;">🔒</div>
+                        <div style="font-weight: 600; font-size: 0.9rem; color: #e0e0ff;">Locked</div>
+                        <div style="font-size: 0.75rem; color: #a0a0c0; margin-top: 5px;">{b_desc}</div>
+                    </div>
+                    """, unsafe_allow_html=True
+                )
+                
+    st.markdown('<div class="glow-divider"></div>', unsafe_allow_html=True)
+    
+    # Bottom Section: XP History Chart
+    c3, c4 = st.columns([2, 1])
+    with c3:
+        st.markdown("### 📈 XP History (Last 7 Days)")
+        import pandas as pd
+        history = state.get("history", [])
+        if not history:
+            st.info("No XP earned yet. Start completing habits!")
+        else:
+            # Group by date
+            df = pd.DataFrame(history)
+            df['date'] = pd.to_datetime(df['date'])
+            # Get last 7 days
+            last_7_days = datetime.now() - timedelta(days=7)
+            df = df[df['date'] >= last_7_days]
+            if not df.empty:
+                daily_xp = df.groupby(df['date'].dt.strftime('%Y-%m-%d'))['amount'].sum()
+                st.bar_chart(daily_xp, color="#38ef7d", use_container_width=True)
+            else:
+                st.info("No XP earned in the last 7 days.")
+                
+    with c4:
+        st.markdown("### 💡 How to earn XP")
+        st.markdown("- **+10 XP** Completing a habit\n- **+50 XP** 7-day habit streak\n- **+20 XP** Adding a new skill\n- **+5 XP** Daily mood check-in\n- **+5 XP** Asking AI Motivator")
