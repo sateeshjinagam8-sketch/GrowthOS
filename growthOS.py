@@ -4,10 +4,18 @@ import os
 from datetime import datetime, timedelta
 import random
 import requests
+import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env
-load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+# Load .env for local development
+load_dotenv()
+
+# Get API key - works both locally and 
+# on Streamlit Cloud
+try:
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+except:
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
 # ─────────────────────────────────────────────
 # Data Directory & File Paths
